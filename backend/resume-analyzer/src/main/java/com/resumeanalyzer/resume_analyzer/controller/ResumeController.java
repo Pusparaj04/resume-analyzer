@@ -1,7 +1,7 @@
-package com.resumeanalyzer.resume_analyzer.Controller;
+package com.resumeanalyzer.resume_analyzer.controller;
 
 
-import com.resumeanalyzer.resume_analyzer.Service.ResumeService;
+import com.resumeanalyzer.resume_analyzer.service.ResumeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,8 +19,7 @@ public class ResumeController {
     ResumeService resumeService;
 
     @PostMapping("/upload")
-    public ResponseEntity<String> uploadResume(@RequestParam("file") MultipartFile file) throws IOException {
-        String response = resumeService.handleResumeUpload(file);
-        return ResponseEntity.ok(response);
+    public ResponseEntity<?> uploadResume(@RequestParam("file") MultipartFile file) throws IOException {
+        return ResponseEntity.ok(resumeService.handleResumeUpload(file));
     }
 }

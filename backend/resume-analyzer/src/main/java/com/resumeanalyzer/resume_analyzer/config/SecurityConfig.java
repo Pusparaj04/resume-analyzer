@@ -1,4 +1,4 @@
-package com.resumeanalyzer.resume_analyzer.Config;
+package com.resumeanalyzer.resume_analyzer.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
