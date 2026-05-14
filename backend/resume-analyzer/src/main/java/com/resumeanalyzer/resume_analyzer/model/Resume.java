@@ -10,6 +10,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @AllArgsConstructor
@@ -27,4 +29,10 @@ public class Resume {
     private String content;
 
     private LocalDateTime uploadedAt;
+
+    @OneToOne(mappedBy = "resume", cascade = CascadeType.ALL)
+    private ResumeAnalysis analysis;
+
+    @OneToMany(mappedBy = "resume", cascade = CascadeType.ALL)
+    private List<JobMatchAnalysis> jobMatchAnalysis = new ArrayList<>();
 }
