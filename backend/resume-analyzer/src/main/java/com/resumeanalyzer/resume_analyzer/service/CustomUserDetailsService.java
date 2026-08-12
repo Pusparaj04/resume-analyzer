@@ -2,11 +2,12 @@ package com.resumeanalyzer.resume_analyzer.service;
 
 import com.resumeanalyzer.resume_analyzer.model.User;
 import com.resumeanalyzer.resume_analyzer.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Service;
 
+@Service
 public class CustomUserDetailsService implements UserDetailsService {
 
     private final UserRepository userRepository;
