@@ -32,4 +32,9 @@ public class ResumeController {
                 resumeService.matchResumeWithJD(file, jobDescription)
         );
     }
+
+    @GetMapping()
+    public ResponseEntity<?> getResume(){
+        return ResponseEntity.ok(resumeService.getResume());
+    }
 }

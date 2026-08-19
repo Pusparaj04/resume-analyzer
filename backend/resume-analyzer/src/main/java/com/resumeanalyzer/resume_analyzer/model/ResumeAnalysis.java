@@ -1,5 +1,6 @@
 package com.resumeanalyzer.resume_analyzer.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -23,5 +24,6 @@ public class ResumeAnalysis {
 
     @OneToOne
     @JoinColumn(name = "resume_id")
+    @JsonIgnore
     private Resume resume;
 }
