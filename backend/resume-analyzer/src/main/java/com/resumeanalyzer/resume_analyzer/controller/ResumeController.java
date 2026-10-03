@@ -1,9 +1,7 @@
 package com.resumeanalyzer.resume_analyzer.controller;
 
 
-import com.resumeanalyzer.resume_analyzer.dto.JobDescriptionRequestDTO;
-import com.resumeanalyzer.resume_analyzer.service.AiAnalysisService;
-import com.resumeanalyzer.resume_analyzer.service.PdfParserService;
+import com.resumeanalyzer.resume_analyzer.service.RuleBasedResumeAnalysisService;
 import com.resumeanalyzer.resume_analyzer.service.ResumeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -18,7 +16,7 @@ public class ResumeController {
     @Autowired
     ResumeService resumeService;
     @Autowired
-    AiAnalysisService analysisService;
+    RuleBasedResumeAnalysisService analysisService;
 
     @PostMapping("/upload")
     public ResponseEntity<?> uploadResume(@RequestParam("file") MultipartFile file) throws IOException {

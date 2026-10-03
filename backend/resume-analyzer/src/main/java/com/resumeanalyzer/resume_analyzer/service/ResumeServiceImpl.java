@@ -1,8 +1,6 @@
 package com.resumeanalyzer.resume_analyzer.service;
 
-import com.resumeanalyzer.resume_analyzer.dto.AnalysisResponseDTO;
-import com.resumeanalyzer.resume_analyzer.dto.JobMatchResponseDTO;
-import com.resumeanalyzer.resume_analyzer.dto.ResumeResponseDTO;
+import com.resumeanalyzer.resume_analyzer.dto.*;
 import com.resumeanalyzer.resume_analyzer.model.JobMatchAnalysis;
 import com.resumeanalyzer.resume_analyzer.model.Resume;
 import com.resumeanalyzer.resume_analyzer.model.ResumeAnalysis;
@@ -21,7 +19,6 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class ResumeServiceImpl implements ResumeService{
@@ -31,7 +28,7 @@ public class ResumeServiceImpl implements ResumeService{
     @Autowired
     private ResumeRepository resumeRepository;
     @Autowired
-    private AiAnalysisService aiAnalysisService;
+    private RuleBasedResumeAnalysisService ruleBasedResumeAnalysisService;
     @Autowired
     private ResumeAnalysisRepository analysisRepository;
     @Autowired
@@ -39,6 +36,9 @@ public class ResumeServiceImpl implements ResumeService{
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private GeminiResumeAnalysisService geminiResumeAnalysisService;
 
     @Override
     public AnalysisResponseDTO handleResumeUpload(MultipartFile file) throws IOException {
@@ -49,7 +49,7 @@ public class ResumeServiceImpl implements ResumeService{
         String extractedText = pdfParserService.extractText(file);
 
 //        Analyze
-        AnalysisResponseDTO analysis = aiAnalysisService.resumeAnalyzer(extractedText);
+        AnalysisResponseDTO analysis = ruleBasedResumeAnalysisService.resumeAnalyzer(extractedText);
 
 //        get authenticated user details
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -91,9 +91,10 @@ public class ResumeServiceImpl implements ResumeService{
     }
 
     @Override
-    public JobMatchResponseDTO matchResumeWithJD(MultipartFile file, String jobDescription) throws IOException {
+    public CombinedResumeAnalysisResponseDTO matchResumeWithJD(MultipartFile file, String jobDescription) throws IOException {
         String extractedText = extractResumeText(file);
-        JobMatchResponseDTO responseDTO = aiAnalysisService.matchJobDescription(extractedText, jobDescription);
+        JobMatchResponseDTO responseDTO = ruleBasedResumeAnalysisService.matchJobDescription(extractedText, jobDescription);
+        GeminiAnalysisResponseDTO geminiAnalysisResponseDTO = geminiResumeAnalysisService.analyzeResume(extractedText, jobDescription);
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String email = authentication.getName();
@@ -116,9 +117,28 @@ public class ResumeServiceImpl implements ResumeService{
         jobMatchAnalysis.setMatchPercentage(responseDTO.getMatchPercentage());
         jobMatchAnalysis.setAnalyzedAt(LocalDateTime.now());
         jobMatchAnalysis.setResume(savedResume);
+
+//        gemini response are of List<String> type, converting string list to String type,
+//        each element is separated by new line and then saving it to database
+        jobMatchAnalysis.setStrengths(
+                String.join("/n", geminiAnalysisResponseDTO.getStrengths())
+        );
+        jobMatchAnalysis.setWeaknesses(
+                String.join("/n", geminiAnalysisResponseDTO.getWeaknesses())
+        );
+        jobMatchAnalysis.setMissingSkills(
+                String.join("/n", geminiAnalysisResponseDTO.getMissingSkills())
+        );
+        jobMatchAnalysis.setSuggestions(
+                String.join("/n", geminiAnalysisResponseDTO.getSuggestions())
+        );
+        
         jobMatchAnalysisRepository.save(jobMatchAnalysis);
 
-        return responseDTO;
+        return new CombinedResumeAnalysisResponseDTO(
+                responseDTO,
+                geminiAnalysisResponseDTO
+        );
     }
 
     @Override

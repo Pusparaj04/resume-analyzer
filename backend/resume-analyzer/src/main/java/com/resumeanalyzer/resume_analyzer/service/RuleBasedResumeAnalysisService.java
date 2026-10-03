@@ -5,9 +5,8 @@ import com.resumeanalyzer.resume_analyzer.dto.JobMatchResponseDTO;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
-public interface AiAnalysisService {
+public interface RuleBasedResumeAnalysisService {
     List<String> SKILLS = Arrays.asList(
             "java", "spring boot", "sql", "python", "react", "docker"
     );
