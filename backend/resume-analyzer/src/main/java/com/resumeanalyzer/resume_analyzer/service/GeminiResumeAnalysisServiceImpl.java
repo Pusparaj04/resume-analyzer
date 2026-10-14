@@ -6,6 +6,7 @@ import com.google.genai.types.GenerateContentResponse;
 import com.google.genai.types.Schema;
 import com.google.genai.types.Type;
 import com.resumeanalyzer.resume_analyzer.dto.GeminiAnalysisResponseDTO;
+import com.resumeanalyzer.resume_analyzer.exception.AIServiceException;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -127,12 +128,19 @@ public class GeminiResumeAnalysisServiceImpl implements GeminiResumeAnalysisServ
                         )
                         .build();
 
-        GenerateContentResponse response =
-                client.models.generateContent(
-                        MODEL,
-                        prompt,
-                        config
-                );
+        GenerateContentResponse response;
+        try{
+            response = client.models.generateContent(
+                    MODEL,
+                    prompt,
+                    config
+            );
+        }catch (Exception e){
+            throw new AIServiceException(
+                    "AI analysis service is currently unavailable. Thank you for your patience.",
+                    e
+            );
+        }
 
         String jsonResponse = response.text();
         return parseResponse(jsonResponse);
@@ -146,8 +154,8 @@ public class GeminiResumeAnalysisServiceImpl implements GeminiResumeAnalysisServ
                     GeminiAnalysisResponseDTO.class
             );
         }catch (Exception e){
-            throw new RuntimeException(
-                    "Failed to parse gemini response.",
+            throw new AIServiceException(
+                    "Failed to parse AI analysis response.",
                     e
             );
         }

@@ -22,10 +22,16 @@ public class SecurityConfig {
     private final CustomUserDetailsService customUserDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+
+    private final RestAccessDeniedHandler restAccessDeniedHandler;
+
     public SecurityConfig(CustomUserDetailsService customUserDetailsService,
-                          JwtAuthenticationFilter jwtAuthenticationFilter){
+                          JwtAuthenticationFilter jwtAuthenticationFilter, RestAuthenticationEntryPoint restAuthenticationEntryPoint, RestAccessDeniedHandler restAccessDeniedHandler){
         this.customUserDetailsService = customUserDetailsService;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.restAuthenticationEntryPoint = restAuthenticationEntryPoint;
+        this.restAccessDeniedHandler = restAccessDeniedHandler;
     }
     @Bean
     public PasswordEncoder passwordEncoder(){
@@ -53,6 +59,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
                         .anyRequest().authenticated()
+                )
+                .exceptionHandling(exception -> exception
+                        .authenticationEntryPoint(restAuthenticationEntryPoint)
+                        .accessDeniedHandler(restAccessDeniedHandler)
                 )
                 .sessionManagement(session ->
                             session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)

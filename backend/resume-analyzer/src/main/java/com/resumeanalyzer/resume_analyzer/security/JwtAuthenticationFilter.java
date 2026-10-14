@@ -1,13 +1,16 @@
 package com.resumeanalyzer.resume_analyzer.security;
 
 import com.resumeanalyzer.resume_analyzer.service.CustomUserDetailsService;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -22,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final CustomUserDetailsService userDetailsService;
+    private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -42,28 +46,42 @@ create authentication token -> set authentication to Security context holder for
 * */
         String jwt = authHeader.substring(7);
 
-        String userEmail = jwtService.extractUserName(jwt);
+        try{
+            String userEmail = jwtService.extractUserName(jwt);
 
-        if(userEmail != null &&
-                SecurityContextHolder.getContext().getAuthentication() == null){
+            if(userEmail != null &&
+                    SecurityContextHolder.getContext().getAuthentication() == null){
 
-            UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
+                UserDetails userDetails = userDetailsService.loadUserByUsername(userEmail);
 
-            if(jwtService.isTokenValid(jwt, userDetails)){
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                                                                userDetails,
-                                                                null,
-                                                                userDetails.getAuthorities()
-                                                                );
+                if(jwtService.isTokenValid(jwt, userDetails)){
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
 
 //              adds extra request metadata to that authentication
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource()
-                                .buildDetails(request)
-                );
+                    authToken.setDetails(
+                            new WebAuthenticationDetailsSource()
+                                    .buildDetails(request)
+                    );
 
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        }catch(JwtException | IllegalArgumentException
+        | AuthenticationException e){
+            SecurityContextHolder.clearContext();
+
+            restAuthenticationEntryPoint.commence(
+                    request,
+                    response,
+                    new BadCredentialsException(
+                            "Invalid or expired JWT",
+                            e
+                    )
+            );
         }
         //filterChain.doFilter(..) -> I'm done move ahead to next chain
         filterChain.doFilter(request, response);

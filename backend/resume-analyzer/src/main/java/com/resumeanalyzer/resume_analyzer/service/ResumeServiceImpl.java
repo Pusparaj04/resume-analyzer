@@ -1,6 +1,10 @@
 package com.resumeanalyzer.resume_analyzer.service;
 
 import com.resumeanalyzer.resume_analyzer.dto.*;
+import com.resumeanalyzer.resume_analyzer.exception.AIServiceException;
+import com.resumeanalyzer.resume_analyzer.exception.InvalidFileException;
+import com.resumeanalyzer.resume_analyzer.exception.JobDescriptionException;
+import com.resumeanalyzer.resume_analyzer.exception.ResumeNotFoundException;
 import com.resumeanalyzer.resume_analyzer.model.JobMatchAnalysis;
 import com.resumeanalyzer.resume_analyzer.model.Resume;
 import com.resumeanalyzer.resume_analyzer.model.ResumeAnalysis;
@@ -42,11 +46,8 @@ public class ResumeServiceImpl implements ResumeService{
 
     @Override
     public AnalysisResponseDTO handleResumeUpload(MultipartFile file) throws IOException {
-        if(file.isEmpty()){
-            throw new RuntimeException("File is Empty!!");
-        }
 //        extract text
-        String extractedText = pdfParserService.extractText(file);
+        String extractedText = extractResumeText(file);
 
 //        Analyze
         AnalysisResponseDTO analysis = ruleBasedResumeAnalysisService.resumeAnalyzer(extractedText);
@@ -83,18 +84,24 @@ public class ResumeServiceImpl implements ResumeService{
 
     @Override
     public String extractResumeText(MultipartFile file) throws IOException {
-        if(file.isEmpty()){
-            throw new RuntimeException("File is Empty!!");
-        }
-
         return pdfParserService.extractText(file);
     }
 
     @Override
     public CombinedResumeAnalysisResponseDTO matchResumeWithJD(MultipartFile file, String jobDescription) throws IOException {
+
+        if(jobDescription.isBlank()){
+            throw new JobDescriptionException("Job description can't be empty!");
+        }
+
         String extractedText = extractResumeText(file);
         JobMatchResponseDTO responseDTO = ruleBasedResumeAnalysisService.matchJobDescription(extractedText, jobDescription);
-        GeminiAnalysisResponseDTO geminiAnalysisResponseDTO = geminiResumeAnalysisService.analyzeResume(extractedText, jobDescription);
+
+        GeminiAnalysisResponseDTO geminiAnalysisResponseDTO = geminiResumeAnalysisService.analyzeResume(
+                extractedText,
+                jobDescription
+        );;
+
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String email = authentication.getName();
@@ -121,18 +128,18 @@ public class ResumeServiceImpl implements ResumeService{
 //        gemini response are of List<String> type, converting string list to String type,
 //        each element is separated by new line and then saving it to database
         jobMatchAnalysis.setStrengths(
-                String.join("/n", geminiAnalysisResponseDTO.getStrengths())
+                String.join("\n", geminiAnalysisResponseDTO.getStrengths())
         );
         jobMatchAnalysis.setWeaknesses(
-                String.join("/n", geminiAnalysisResponseDTO.getWeaknesses())
+                String.join("\n", geminiAnalysisResponseDTO.getWeaknesses())
         );
         jobMatchAnalysis.setMissingSkills(
-                String.join("/n", geminiAnalysisResponseDTO.getMissingSkills())
+                String.join("\n", geminiAnalysisResponseDTO.getMissingSkills())
         );
         jobMatchAnalysis.setSuggestions(
-                String.join("/n", geminiAnalysisResponseDTO.getSuggestions())
+                String.join("\n", geminiAnalysisResponseDTO.getSuggestions())
         );
-        
+
         jobMatchAnalysisRepository.save(jobMatchAnalysis);
 
         return new CombinedResumeAnalysisResponseDTO(
@@ -149,6 +156,9 @@ public class ResumeServiceImpl implements ResumeService{
                 () -> new RuntimeException("User not found!!")
         );
         List<Resume> resumes = resumeRepository.findByUser(user);
+        if(resumes.size() == 0){
+            throw new ResumeNotFoundException("There's no any resume of user: "+user.getName());
+        }
         List<ResumeResponseDTO> resumeList = new ArrayList<>();
         for(Resume resume : resumes){
             ResumeResponseDTO resumeDTO = new ResumeResponseDTO();

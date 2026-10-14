@@ -3,6 +3,7 @@ package com.resumeanalyzer.resume_analyzer.service;
 import com.resumeanalyzer.resume_analyzer.dto.AuthResponse;
 import com.resumeanalyzer.resume_analyzer.dto.LoginRequest;
 import com.resumeanalyzer.resume_analyzer.dto.RegisterRequest;
+import com.resumeanalyzer.resume_analyzer.exception.EmailAreadyExistException;
 import com.resumeanalyzer.resume_analyzer.model.User;
 import com.resumeanalyzer.resume_analyzer.repository.UserRepository;
 import com.resumeanalyzer.resume_analyzer.security.JwtService;
@@ -34,7 +35,7 @@ public class AuthServiceImpl implements AuthService{
     @Override
     public AuthResponse register(RegisterRequest registerRequest) {
         if(userRepository.findByEmail(registerRequest.getEmail()).isPresent()){
-            throw new RuntimeException("Email already registered.");
+            throw new EmailAreadyExistException("The email you're using is already a registered user.");
         }
         User user = new User();
         user.setName(registerRequest.getName());

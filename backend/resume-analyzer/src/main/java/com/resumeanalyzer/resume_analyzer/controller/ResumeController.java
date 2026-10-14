@@ -33,6 +33,7 @@ public class ResumeController {
 
     @GetMapping()
     public ResponseEntity<?> getResume(){
+//        throw new RuntimeException("Testing Global Exception handler");
         return ResponseEntity.ok(resumeService.getResume());
     }
 }
