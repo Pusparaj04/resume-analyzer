@@ -1,5 +1,6 @@
 package com.resumeanalyzer.resume_analyzer.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -29,7 +30,20 @@ public class JobMatchAnalysis {
     private float matchPercentage;
     private LocalDateTime analyzedAt;
 
+    @Column(columnDefinition = "Text")
+    private String strengths;
+
+    @Column(columnDefinition = "Text")
+    private String weaknesses;
+
+    @Column(columnDefinition = "Text")
+    private String missingSkills;
+
+    @Column(columnDefinition = "Text")
+    private String suggestions;
+
     @ManyToOne
     @JoinColumn(name = "resume_id")
+    @JsonIgnore
     private Resume resume;
 }

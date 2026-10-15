@@ -1,20 +1,28 @@
 package com.resumeanalyzer.resume_analyzer.service;
 
-import com.resumeanalyzer.resume_analyzer.dto.AnalysisResponseDTO;
-import com.resumeanalyzer.resume_analyzer.dto.JobMatchResponseDTO;
+import com.resumeanalyzer.resume_analyzer.dto.*;
+import com.resumeanalyzer.resume_analyzer.exception.AIServiceException;
+import com.resumeanalyzer.resume_analyzer.exception.InvalidFileException;
+import com.resumeanalyzer.resume_analyzer.exception.JobDescriptionException;
+import com.resumeanalyzer.resume_analyzer.exception.ResumeNotFoundException;
 import com.resumeanalyzer.resume_analyzer.model.JobMatchAnalysis;
 import com.resumeanalyzer.resume_analyzer.model.Resume;
 import com.resumeanalyzer.resume_analyzer.model.ResumeAnalysis;
+import com.resumeanalyzer.resume_analyzer.model.User;
 import com.resumeanalyzer.resume_analyzer.repository.JobMatchAnalysisRepository;
 import com.resumeanalyzer.resume_analyzer.repository.ResumeAnalysisRepository;
 import com.resumeanalyzer.resume_analyzer.repository.ResumeRepository;
+import com.resumeanalyzer.resume_analyzer.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class ResumeServiceImpl implements ResumeService{
@@ -24,28 +32,39 @@ public class ResumeServiceImpl implements ResumeService{
     @Autowired
     private ResumeRepository resumeRepository;
     @Autowired
-    private AiAnalysisService aiAnalysisService;
+    private RuleBasedResumeAnalysisService ruleBasedResumeAnalysisService;
     @Autowired
     private ResumeAnalysisRepository analysisRepository;
     @Autowired
     private JobMatchAnalysisRepository jobMatchAnalysisRepository;
 
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private GeminiResumeAnalysisService geminiResumeAnalysisService;
+
     @Override
     public AnalysisResponseDTO handleResumeUpload(MultipartFile file) throws IOException {
-        if(file.isEmpty()){
-            throw new RuntimeException("File is Empty!!");
-        }
 //        extract text
-        String extractedText = pdfParserService.extractText(file);
+        String extractedText = extractResumeText(file);
 
 //        Analyze
-        AnalysisResponseDTO analysis = aiAnalysisService.resumeAnalyzer(extractedText);
+        AnalysisResponseDTO analysis = ruleBasedResumeAnalysisService.resumeAnalyzer(extractedText);
+
+//        get authenticated user details
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
 
 //        save resume
         Resume resume = new Resume();
         resume.setFileName(file.getOriginalFilename());
         resume.setUploadedAt(LocalDateTime.now());
         resume.setContent(extractedText);
+        resume.setUser(user);
 
         Resume savedResume = resumeRepository.save(resume);
 
@@ -65,22 +84,36 @@ public class ResumeServiceImpl implements ResumeService{
 
     @Override
     public String extractResumeText(MultipartFile file) throws IOException {
-        if(file.isEmpty()){
-            throw new RuntimeException("File is Empty!!");
-        }
-
         return pdfParserService.extractText(file);
     }
 
     @Override
-    public JobMatchResponseDTO matchResumeWithJD(MultipartFile file, String jobDescription) throws IOException {
+    public CombinedResumeAnalysisResponseDTO matchResumeWithJD(MultipartFile file, String jobDescription) throws IOException {
+
+        if(jobDescription.isBlank()){
+            throw new JobDescriptionException("Job description can't be empty!");
+        }
+
         String extractedText = extractResumeText(file);
-        JobMatchResponseDTO responseDTO = aiAnalysisService.matchJobDescription(extractedText, jobDescription);
+        JobMatchResponseDTO responseDTO = ruleBasedResumeAnalysisService.matchJobDescription(extractedText, jobDescription);
+
+        GeminiAnalysisResponseDTO geminiAnalysisResponseDTO = geminiResumeAnalysisService.analyzeResume(
+                extractedText,
+                jobDescription
+        );;
+
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+        User user = userRepository.findByEmail(email).orElseThrow(
+                () -> new RuntimeException("User not found!!")
+        );
 
         Resume resume = new Resume();
-        resume.setFileName(resume.getFileName());
+        resume.setFileName(file.getOriginalFilename());
         resume.setContent(extractedText);
         resume.setUploadedAt(LocalDateTime.now());
+        resume.setUser(user);
 
         Resume savedResume = resumeRepository.save(resume);
 
@@ -91,8 +124,49 @@ public class ResumeServiceImpl implements ResumeService{
         jobMatchAnalysis.setMatchPercentage(responseDTO.getMatchPercentage());
         jobMatchAnalysis.setAnalyzedAt(LocalDateTime.now());
         jobMatchAnalysis.setResume(savedResume);
+
+//        gemini response are of List<String> type, converting string list to String type,
+//        each element is separated by new line and then saving it to database
+        jobMatchAnalysis.setStrengths(
+                String.join("\n", geminiAnalysisResponseDTO.getStrengths())
+        );
+        jobMatchAnalysis.setWeaknesses(
+                String.join("\n", geminiAnalysisResponseDTO.getWeaknesses())
+        );
+        jobMatchAnalysis.setMissingSkills(
+                String.join("\n", geminiAnalysisResponseDTO.getMissingSkills())
+        );
+        jobMatchAnalysis.setSuggestions(
+                String.join("\n", geminiAnalysisResponseDTO.getSuggestions())
+        );
+
         jobMatchAnalysisRepository.save(jobMatchAnalysis);
 
-        return responseDTO;
+        return new CombinedResumeAnalysisResponseDTO(
+                responseDTO,
+                geminiAnalysisResponseDTO
+        );
+    }
+
+    @Override
+    public List<ResumeResponseDTO> getResume() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String email = authentication.getName();
+        User user = userRepository.findByEmail(email).orElseThrow(
+                () -> new RuntimeException("User not found!!")
+        );
+        List<Resume> resumes = resumeRepository.findByUser(user);
+        if(resumes.size() == 0){
+            throw new ResumeNotFoundException("There's no any resume of user: "+user.getName());
+        }
+        List<ResumeResponseDTO> resumeList = new ArrayList<>();
+        for(Resume resume : resumes){
+            ResumeResponseDTO resumeDTO = new ResumeResponseDTO();
+            resumeDTO.setId(resume.getId());
+            resumeDTO.setFileName(resume.getFileName());
+            resumeDTO.setUploadedAt(resume.getUploadedAt());
+            resumeList.add(resumeDTO);
+        }
+        return resumeList;
     }
 }

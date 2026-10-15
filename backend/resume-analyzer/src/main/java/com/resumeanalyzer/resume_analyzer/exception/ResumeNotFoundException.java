@@ -1,0 +1,7 @@
+package com.resumeanalyzer.resume_analyzer.exception;
+
+public class ResumeNotFoundException extends RuntimeException{
+    public ResumeNotFoundException(String message){
+        super(message);
+    }
+}

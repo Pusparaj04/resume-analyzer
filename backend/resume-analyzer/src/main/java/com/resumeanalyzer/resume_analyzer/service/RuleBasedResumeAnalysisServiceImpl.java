@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 
 @Service
-public class AiAnalysisServiceImpl implements AiAnalysisService{
+public class RuleBasedResumeAnalysisServiceImpl implements RuleBasedResumeAnalysisService {
     @Override
     public AnalysisResponseDTO resumeAnalyzer(String text) {
         String lowerText = text.toLowerCase();
