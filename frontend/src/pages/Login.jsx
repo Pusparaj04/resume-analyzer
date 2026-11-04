@@ -1,8 +1,12 @@
+
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
+import api from "../services/api";
 
 function Login() {
+  const navigate = useNavigate();
+
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -10,6 +14,7 @@ function Login() {
 
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -28,12 +33,13 @@ function Login() {
 
   function validateForm() {
     const newErrors = {};
+    const email = form.email.trim();
 
-    if (!form.email.trim()) {
+    if (!email) {
       newErrors.email = "Email is required.";
-    } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
-    ) {
+    } else if (email.length > 254) {
+      newErrors.email = "Email cannot exceed 254 characters.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = "Enter a valid email address.";
     }
 
@@ -44,8 +50,10 @@ function Login() {
     return newErrors;
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
+
+    if (loading) return;
 
     const validationErrors = validateForm();
     setErrors(validationErrors);
@@ -54,9 +62,54 @@ function Login() {
       return;
     }
 
-    setErrors({
-      form: "Input validation passed. Backend login integration is not implemented yet.",
-    });
+    setLoading(true);
+
+    try {
+      const response = await api.post("/api/auth/login", {
+        email: form.email.trim(),
+        password: form.password,
+      });
+
+      const { token } = response.data;
+
+      if (!token) {
+        setErrors({
+          form: "Login response did not contain an authentication token.",
+        });
+        return;
+      }
+
+      // Store the JWT for this browser tab's session.
+      sessionStorage.setItem("authToken", token);
+      // store the user's email
+      sessionStorage.setItem("userEmail", response.data.email);
+
+      // Navigate to the dashboard after successful authentication.
+      navigate("/dashboard", { replace: true });
+    } catch (error) {
+      const status = error.response?.status;
+      const responseData = error.response?.data;
+
+      let message;
+
+      if (!error.response) {
+        message =
+          "Unable to reach the server. Check that the backend is running and CORS is configured.";
+      } else if (status === 401) {
+        message = "Invalid email or password.";
+      } else if (typeof responseData === "string") {
+        message = responseData;
+      } else {
+        message =
+          responseData?.message ||
+          responseData?.error ||
+          "Login failed. Please try again.";
+      }
+
+      setErrors({ form: message });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -75,9 +128,11 @@ function Login() {
             onChange={handleChange}
             placeholder="you@example.com"
             autoComplete="email"
+            maxLength={254}
             aria-invalid={Boolean(errors.email)}
             aria-describedby={errors.email ? "email-error" : undefined}
           />
+
           {errors.email && (
             <span className="field-error" id="email-error">
               {errors.email}
@@ -85,6 +140,7 @@ function Login() {
           )}
 
           <label htmlFor="password">Password</label>
+
           <div className="password-input-wrapper">
             <input
               id="password"
@@ -99,27 +155,37 @@ function Login() {
                 errors.password ? "password-error" : undefined
               }
             />
+
             <button
               type="button"
               className="password-toggle"
-              onClick={() => setShowPassword((previous) => !previous)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              onClick={() =>
+                setShowPassword((previous) => !previous)
+              }
+              aria-label={
+                showPassword ? "Hide password" : "Show password"
+              }
             >
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
+
           {errors.password && (
             <span className="field-error" id="password-error">
               {errors.password}
             </span>
           )}
 
-          <button className="button button-primary" type="submit">
-            Sign In
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? "Signing in..." : "Sign In"}
           </button>
 
           {errors.form && (
-            <p className="form-message" role="status">
+            <p className="form-message form-error-message" role="alert">
               {errors.form}
             </p>
           )}
@@ -128,6 +194,7 @@ function Login() {
         <p>
           Don't have an account? <Link to="/register">Create one</Link>
         </p>
+
         <Link to="/">Back to home</Link>
       </section>
     </main>

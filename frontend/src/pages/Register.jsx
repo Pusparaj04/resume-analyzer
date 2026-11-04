@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
+import api from "../services/api";
 
 function Register() {
   const [form, setForm] = useState({
@@ -13,6 +14,8 @@ function Register() {
   const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState("");
 
   function handleChange(event) {
     const { name, value } = event.target;
@@ -27,27 +30,36 @@ function Register() {
       [name]: "",
       form: "",
     }));
+
+    setSuccessMessage("");
   }
 
   function validateForm() {
     const newErrors = {};
+    const name = form.name.trim();
+    const email = form.email.trim();
 
-    if (!form.name.trim()) {
+    if (!name) {
       newErrors.name = "Full name is required.";
+    } else if (name.length < 2 || name.length > 50) {
+      newErrors.name = "Name must contain 2–50 characters.";
     }
 
-    if (!form.email.trim()) {
+    if (!email) {
       newErrors.email = "Email is required.";
-    } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())
-    ) {
+    } else if (email.length > 254) {
+      newErrors.email = "Email cannot exceed 254 characters.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       newErrors.email = "Enter a valid email address.";
     }
 
     if (!form.password) {
       newErrors.password = "Password is required.";
-    } else if (form.password.length < 8) {
-      newErrors.password = "Password must contain at least 8 characters.";
+    } else if (
+      form.password.length < 8 ||
+      form.password.length > 13
+    ) {
+      newErrors.password = "Password must contain 8–13 characters.";
     }
 
     if (!form.confirmPassword) {
@@ -59,19 +71,64 @@ function Register() {
     return newErrors;
   }
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
+
+    if (loading) return;
 
     const validationErrors = validateForm();
     setErrors(validationErrors);
+    setSuccessMessage("");
 
     if (Object.keys(validationErrors).length > 0) {
       return;
     }
 
-    setErrors({
-      form: "Input validation passed. Backend registration is not implemented yet.",
-    });
+    setLoading(true);
+
+    try {
+      const response = await api.post("/api/auth/register", {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      });
+
+      const message  = response.data;
+
+      setSuccessMessage(
+        message || "Registration successful. Your account has been created."
+      );
+
+      setForm({
+        name: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+      });
+    } catch (error) {
+      const status = error.response?.status;
+      const responseData = error.response?.data;
+
+      let message;
+
+      if (!error.response) {
+        message =
+          "Unable to reach the server. Check that the backend is running and CORS is configured.";
+      } else if (status === 409) {
+        message = "An account with this email may already exist.";
+      } else if (typeof responseData === "string") {
+        message = responseData;
+      } else {
+        message =
+          responseData?.message ||
+          responseData?.error ||
+          "Registration failed. Please check your details and try again.";
+      }
+
+      setErrors({ form: message });
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -90,10 +147,14 @@ function Register() {
             onChange={handleChange}
             placeholder="Your full name"
             autoComplete="name"
+            maxLength={50}
             aria-invalid={Boolean(errors.name)}
+            aria-describedby={errors.name ? "name-error" : undefined}
           />
           {errors.name && (
-            <span className="field-error">{errors.name}</span>
+            <span className="field-error" id="name-error">
+              {errors.name}
+            </span>
           )}
 
           <label htmlFor="email">Email address</label>
@@ -105,10 +166,14 @@ function Register() {
             onChange={handleChange}
             placeholder="you@example.com"
             autoComplete="email"
+            maxLength={254}
             aria-invalid={Boolean(errors.email)}
+            aria-describedby={errors.email ? "email-error" : undefined}
           />
           {errors.email && (
-            <span className="field-error">{errors.email}</span>
+            <span className="field-error" id="email-error">
+              {errors.email}
+            </span>
           )}
 
           <label htmlFor="password">Password</label>
@@ -119,9 +184,14 @@ function Register() {
               type={showPassword ? "text" : "password"}
               value={form.password}
               onChange={handleChange}
-              placeholder="At least 8 characters"
+              placeholder="8–13 characters"
               autoComplete="new-password"
+              minLength={8}
+              maxLength={13}
               aria-invalid={Boolean(errors.password)}
+              aria-describedby={
+                errors.password ? "password-error" : undefined
+              }
             />
             <button
               type="button"
@@ -133,7 +203,9 @@ function Register() {
             </button>
           </div>
           {errors.password && (
-            <span className="field-error">{errors.password}</span>
+            <span className="field-error" id="password-error">
+              {errors.password}
+            </span>
           )}
 
           <label htmlFor="confirmPassword">Confirm password</label>
@@ -146,7 +218,14 @@ function Register() {
               onChange={handleChange}
               placeholder="Re-enter your password"
               autoComplete="new-password"
+              minLength={8}
+              maxLength={13}
               aria-invalid={Boolean(errors.confirmPassword)}
+              aria-describedby={
+                errors.confirmPassword
+                  ? "confirm-password-error"
+                  : undefined
+              }
             />
             <button
               type="button"
@@ -166,18 +245,28 @@ function Register() {
             </button>
           </div>
           {errors.confirmPassword && (
-            <span className="field-error">
+            <span className="field-error" id="confirm-password-error">
               {errors.confirmPassword}
             </span>
           )}
 
-          <button className="button button-primary" type="submit">
-            Create Account
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? "Creating account..." : "Create Account"}
           </button>
 
           {errors.form && (
-            <p className="form-message" role="status">
+            <p className="form-message form-error-message" role="alert">
               {errors.form}
+            </p>
+          )}
+
+          {successMessage && (
+            <p className="form-message form-success-message" role="status">
+              {successMessage}
             </p>
           )}
         </form>
